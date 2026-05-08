@@ -174,7 +174,41 @@ class MessageTest(unittest.TestCase):
       allocation_count.reset()
       allocation_count.fail_on(i)
       with self.assertRaises(MemoryError):
-        ManyAllocsScenario()
+        allocation_count.reset()
+
+  @unittest.skipIf(
+      not hasattr(sys, 'gettotalrefcount'),
+      'Requires Debug-only allocation_count API',
+  )
+  def testWeakMapOomAborts(self, message_module):
+    def Scenario():
+      msg = message_module.TestAllTypes()
+      _ = msg.optional_nested_message
+      _ = msg.repeated_int32
+      _ = msg.repeated_nested_message
+
+      msg2 = message_module.TestAllTypes()
+      msg2.optional_nested_message.bb = 100
+      msg2.repeated_int32.append(200)
+      msg2.repeated_nested_message.add().bb = 300
+      msg.MergeFrom(msg2)
+
+      msg3 = message_module.TestAllTypes()
+      _ = msg3.optional_nested_message
+      _ = msg3.repeated_int32
+      _ = msg3.repeated_nested_message
+      msg3.Clear()
+
+    Scenario()
+    allocation_count.reset()
+    Scenario()
+    total = allocation_count.get()
+    self.assertGreater(total, 0)
+    for i in range(total):
+      allocation_count.reset()
+      allocation_count.fail_on(i)
+      with self.assertRaises(MemoryError):
+        Scenario()
     allocation_count.reset()
 
   def testBadUtf8String(self, message_module):
